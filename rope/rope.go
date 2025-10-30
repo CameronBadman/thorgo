@@ -452,8 +452,6 @@ func (r *ropeImpl[Id, T]) DeleteTo(afterId, untilId Id) (count int) {
 			return
 		}
 
-		// if someone is/was iterating here, go _back_ so they'll start up again from after the previous node
-		// this is probably a bit weird but it is an approach
 		if e.iterRef != nil {
 			e.iterRef.node = e.levels[0].prev
 		}
@@ -462,7 +460,8 @@ func (r *ropeImpl[Id, T]) DeleteTo(afterId, untilId Id) (count int) {
 		r.len -= e.dl.Len
 		count++
 
-		for i := range r.height {
+		
+		for i := 0; i < r.height; i++ {
 			node := nodes[i]
 			nl := &node.levels[i]
 			if i >= len(e.levels) {
@@ -480,6 +479,7 @@ func (r *ropeImpl[Id, T]) DeleteTo(afterId, untilId Id) (count int) {
 			}
 			nl.next = c // when this becomes nil for levels[0], we bail
 		}
+
 
 		prevLoopId = e.id
 		r.returnToPool(e) // clears id
