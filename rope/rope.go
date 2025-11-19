@@ -358,6 +358,14 @@ func (r *ropeImpl[Id, T]) rseekNodes(curr *ropeNode[Id, T], target *[maxHeight]*
 	}
 }
 
+func (r *ropeImpl[Id, T]) DataPtr(id Id) *T {
+	node := r.byId[id]
+	if node == nil {
+		return nil
+	}
+	return &node.dl.Data
+}
+
 func (r *ropeImpl[Id, T]) Less(a, b Id) bool {
 	c, _ := r.Compare(a, b)
 	return c < 0
