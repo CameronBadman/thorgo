@@ -5,9 +5,16 @@ import (
 	"math/rand/v2"
 )
 
-// randomHeight picks a height in the range [1,31], inclusive.
-// the odds of 2 is 50%, 3 is 25%, 4 is 12.5%... down to 32 at ~0.00000005%
+// randomHeight picks a height in the range [1,32], inclusive.
+// The odds of returning 1 is 50%, 2 is 25%, 3 is 12.5%, and so on.
 func randomHeight() int {
-	// always set bits 1+2, so this can at most return 30 plus our min 1 => [1,31].
-	return 1 + bits.TrailingZeros32(rand.Uint32()|3)
+	// 1 + TrailingZeros is a geometric distribution.
+	// We cap it at maxHeight (32).
+	// rand.Uint32() can be zero, in which case TrailingZeros32 is 32.
+	// So h can be at most 33, which we cap.
+	h := 1 + bits.TrailingZeros32(rand.Uint32())
+	if h > maxHeight {
+		return maxHeight
+	}
+	return h
 }

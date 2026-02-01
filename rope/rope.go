@@ -36,7 +36,7 @@ var (
 )
 
 // New builds a new Rope[Id, T].
-func New[Id comparable, T any]() Rope[Id, T] {
+func New[Id comparable, T Sizer]() Rope[Id, T] {
 	var root T
 	return NewRoot[Id](root)
 }
@@ -175,60 +175,68 @@ outer:
 	// return e.levels[0].next.id, e.dl.Len - position
 }
 
-func (r *ropeImpl[Id, T]) Insert(afterId Id, newId Id, length int, data T) error {
-	_, err := r.Splice(&afterId, nil, &newId, length, data)
+func (r *ropeImpl[Id, T]) Insert(afterId Id, newId Id, data T) error {
+	_, err := r.Splice(afterId, nil, &newId, data)
 	return err
 }
 
 func (r *ropeImpl[Id, T]) Delete(afterId Id, untilId Id) ([]Removed[Id, T], error) {
-	return r.Splice(&afterId, &untilId, nil, 0, *new(T))
+	// We pass nil for insertId and a zero-value/empty T for data
+	return r.Splice(afterId, &untilId, nil, *new(T))
 }
 
-func (r *ropeImpl[Id, T]) rseekNodes(curr *ropeNode[Id, T], target *[maxHeight]*ropeNode[Id, T]) {
-	i := 0
-	for {
-		ll := len(curr.levels)
-		for i < ll {
-			target[i] = curr
-			i++
-			if i == r.height {
-				return
-			}
-		}
-		curr = curr.levels[ll-1].prev
-	}
-}
-
-func (r *ropeImpl[Id, T]) Splice(afterId *Id, deleteUntilId *Id, newId *Id, length int, data T) (removed []Removed[Id, T], err error) {
-	var after *ropeNode[Id, T]
-	if afterId == nil {
-		after = &r.head
-	} else {
-		after = r.byId[*afterId]
-		if after == nil {
+func (r *ropeImpl[Id, T]) Splice(
+	afterId Id,
+	deleteUntilId *Id,
+	insertId *Id,
+	data T,
+) (removed []Removed[Id, T], err error) {
+	afterNode := r.byId[afterId]
+	if afterNode == nil {
+		var zero Id
+		if afterId == zero {
+			afterNode = &r.head
+		} else {
 			return nil, ErrBadAnchor
 		}
 	}
+
+	doDelete := false
 	var deleteUntil Id
-	var doDelete bool
-	if deleteUntilId != nil && (afterId == nil || *afterId != *deleteUntilId) {
-		deleteUntil = *deleteUntilId
-		doDelete = true
+	if deleteUntilId != nil {
+		// Only perform deletion if deleteUntilId is different from afterId
+		// This ensures that Splice(A, &A, nil, data) does not delete anything.
+		if *deleteUntilId != afterId {
+			doDelete = true
+			deleteUntil = *deleteUntilId
+		}
 	}
-	var insertId Id
-	var doInsert bool
-	if newId != nil {
-		if _, exists := r.byId[*newId]; exists {
+
+	doInsert := insertId != nil
+	var length int
+	var iid Id
+
+	if doInsert {
+		if _, exists := r.byId[*insertId]; exists {
 			return nil, ErrIdExists
 		}
+		iid = *insertId
+
+		if s, ok := any(data).(Sizer); ok {
+			length = s.Len()
+		}
+		// If not a Sizer, length stays 0.
+
 		if length < 0 {
 			return nil, ErrNegativeLength
 		}
-		insertId = *newId
-		doInsert = true
 	}
-	return r.splice(after, doDelete, deleteUntil, doInsert, insertId, length, data)
+
+	return r.splice(afterNode, doDelete, deleteUntil, doInsert, iid, length, data)
 }
+
+
+
 
 func (r *ropeImpl[Id, T]) splice(after *ropeNode[Id, T], doDelete bool, deleteUntil Id, doInsert bool, insertId Id, length int, data T) (removed []Removed[Id, T], err error) {
 	type ropeSeek struct {
@@ -305,7 +313,13 @@ func (r *ropeImpl[Id, T]) splice(after *ropeNode[Id, T], doDelete bool, deleteUn
 			r.nodePool = r.nodePool[:idx]
 			newNode.id = insertId
 			newNode.dl = DataLen[T]{Data: data, Len: length}
-			height = len(newNode.levels)
+
+			height = randomHeight()
+			if cap(newNode.levels) < height {
+				newNode.levels = make([]ropeLevel[Id, T], height)
+			} else {
+				newNode.levels = newNode.levels[:height]
+			}
 		} else {
 			height = randomHeight()
 			newNode = &ropeNode[Id, T]{
@@ -390,6 +404,21 @@ func (r *ropeImpl[Id, T]) Between(afterA, afterB Id) (distance int, ok bool) {
 	}
 
 	return posB - posA, true
+}
+
+func (r *ropeImpl[Id, T]) rseekNodes(curr *ropeNode[Id, T], target *[maxHeight]*ropeNode[Id, T]) {
+	i := 0
+	for {
+		ll := len(curr.levels)
+		for i < ll {
+			target[i] = curr
+			i++
+			if i == r.height {
+				return
+			}
+		}
+		curr = curr.levels[ll-1].prev
+	}
 }
 
 func (r *ropeImpl[Id, T]) Compare(a, b Id) (cmp int, ok bool) {

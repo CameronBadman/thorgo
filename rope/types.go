@@ -53,6 +53,10 @@ type ropeImpl[Id comparable, T any] struct {
 	lastId   Id
 }
 
+type Sizer interface {
+	Len() int
+}
+
 // Rope is a skip list.
 // It supports zero-length entries.
 // It is not goroutine-safe.
@@ -93,9 +97,9 @@ type Rope[Id comparable, T any] interface {
 	// newId: if non-nil, insert new node with given data
 	// Returns removed nodes for undo support.
 	// Costs ~O(logn+m), where m is the number of nodes being deleted.
-	Splice(afterId *Id, deleteUntilId *Id, newId *Id, length int, data T) (removed []Removed[Id, T], err error)
+	Splice(afterId Id, deleteUntilId *Id, insertId *Id, data T) (removed []Removed[Id, T], err error)
 	// Insert adds a new entry after afterId. Convenience wrapper around Splice.
-	Insert(afterId Id, newId Id, length int, data T) error
+	Insert(afterId Id, newId Id, data T) error
 	// Delete removes entries from after afterId until untilId. Convenience wrapper around Splice.
 	Delete(afterId Id, untilId Id) ([]Removed[Id, T], error)
 	// LastId returns the last Id in this rope.
