@@ -280,7 +280,6 @@ func TestIter(t *testing.T) {
 
 	i = r.Iter(0)
 	next, stop = iter.Pull2(i)
-	defer stop()
 
 	if r.Count() != 1 {
 		t.Errorf("should hve single entry")
@@ -302,5 +301,19 @@ func TestIter(t *testing.T) {
 
 	if r.LastId() != 0 {
 		t.Errorf("should have zero lastId, was=%v", r.LastId())
+	}
+}
+
+func BenchmarkRealistic(b *testing.B) {
+	r := New[int, struct{}]()
+	for i := 0; i < benchOps; i++ {
+		r.InsertIdAfter(0, nextId(), rand.IntN(16), struct{}{})
+	}
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		pos := rand.IntN(r.Len())
+		r.ByPosition(pos, false)
 	}
 }
