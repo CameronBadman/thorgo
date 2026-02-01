@@ -65,6 +65,20 @@ func BenchmarkRope(b *testing.B) {
 	}
 }
 
+func BenchmarkRealistic(b *testing.B) {
+	r := New[int, SizedEmpty]()
+	for i := 0; i < benchOps; i++ {
+		r.Insert(0, nextId(), SizedEmpty(rand.IntN(16)))
+	}
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		pos := rand.IntN(r.Len())
+		r.ByPosition(pos, false)
+	}
+}
+
 func BenchmarkCompare(b *testing.B) {
 	r := New[int, SizedEmpty]()
 	ids := []int{0}
