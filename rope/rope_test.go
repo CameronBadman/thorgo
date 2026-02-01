@@ -7,13 +7,6 @@ import (
 	"testing"
 )
 
-// :. about 2x JS speed
-
-//  5000k => 6807085083 ns/op  (6807.09ms/run)
-//  1000k =>  678856229 ns/op   (678.86ms/run)
-//   500k =>  245334542 ns/op   (245.33ms/run)
-//   100k =>   28436903 ns/op    (28.44ms/run)
-
 const (
 	benchOps     = 100_000
 	deleteOddsOf = 20
@@ -38,29 +31,22 @@ func BenchmarkRope(b *testing.B) {
 		r := New[int, struct{}]()
 
 		for j := 0; j < benchOps; j++ {
-
 			if len(ids) <= 2 || rand.IntN(deleteOddsOf) != 0 {
-				// insert case
 				choice := rand.IntN(len(ids))
 				afterId := ids[choice]
-
 				newId := nextId()
-				if !r.InsertIdAfter(afterId, newId, rand.IntN(16), struct{}{}) {
-					b.Errorf("couldn't insert")
-				}
+
+				r.Insert(afterId, newId, rand.IntN(16), struct{}{})
 				ids = append(ids, newId)
-
 			} else {
-				// delete case
 				choice := 1 + rand.IntN(len(ids)-2)
-
 				deleteId := ids[choice]
 				last := ids[len(ids)-1]
 				ids = ids[:len(ids)-1]
 				ids[choice] = last
 
 				info := r.Info(deleteId)
-				r.DeleteTo(info.Prev, deleteId)
+				r.Delete(info.Prev, deleteId)
 			}
 		}
 	}
@@ -73,26 +59,23 @@ func BenchmarkCompare(b *testing.B) {
 	for range 100_000 {
 		choice := rand.IntN(len(ids))
 		afterId := ids[choice]
-
 		newId := nextId()
-		if !r.InsertIdAfter(afterId, newId, rand.IntN(16), struct{}{}) {
-			b.Errorf("couldn't insert")
+
+		_, err := r.Splice(&afterId, nil, &newId, rand.IntN(16), struct{}{})
+		if err != nil {
+			b.Errorf("couldn't insert: %v", err)
 		}
 		ids = append(ids, newId)
 	}
 
-	// before: ~580ns/op
-
 	for b.Loop() {
 		a := ids[rand.IntN(len(ids))]
-		b := ids[rand.IntN(len(ids))]
-
-		r.Less(a, b)
+		c := ids[rand.IntN(len(ids))]
+		r.Less(a, c)
 	}
 }
 
 func TestRope(t *testing.T) {
-	// run N times to confirm rope behavior
 	for i := 0; i < 50; i++ {
 		if t.Failed() {
 			return
@@ -100,9 +83,12 @@ func TestRope(t *testing.T) {
 
 		r := New[int, string]()
 
-		// insert "hello" and check
 		helloId := nextId()
-		r.InsertIdAfter(0, helloId, 5, "hello")
+		zero := 0
+		_, err := r.Splice(&zero, nil, &helloId, 5, "hello")
+		if err != nil {
+			t.Errorf("couldn't insert hello: %v", err)
+		}
 
 		if r.Count() != 1 {
 			t.Errorf("expected count=1")
@@ -118,9 +104,11 @@ func TestRope(t *testing.T) {
 			t.Errorf("expected helloAt=5, was=%v", helloAt)
 		}
 
-		// insert " there"
 		thereId := nextId()
-		r.InsertIdAfter(helloId, thereId, 6, " there")
+		_, err = r.Splice(&helloId, nil, &thereId, 6, " there")
+		if err != nil {
+			t.Errorf("couldn't insert there: %v", err)
+		}
 		if r.Len() != 11 {
 			t.Errorf("expected len=11, was=%v", r.Len())
 		}
@@ -143,7 +131,6 @@ func TestRope(t *testing.T) {
 			t.Errorf("bad lookup=%+v", thereLookup)
 		}
 
-		// position
 		if id, offset := r.ByPosition(5, false); id != helloId || offset != 0 {
 			t.Errorf("bad byPosition: id=%d (wanted=%d), offset=%d", id, helloId, offset)
 		}
@@ -157,7 +144,6 @@ func TestRope(t *testing.T) {
 			t.Errorf("bad byPosition: id=%d (wanted=%d), offset=%d", id, helloId, offset)
 		}
 
-		// compare
 		var cmp int
 		var ok bool
 		cmp, ok = r.Compare(helloId, thereId)
@@ -185,10 +171,12 @@ func TestRope(t *testing.T) {
 			t.Errorf("bad read")
 		}
 
-		// delete first
-		count := r.DeleteTo(0, helloId)
-		if count != 1 {
-			t.Errorf("expected deleted one, was: %v", count)
+		deleted, err := r.Splice(&zero, &helloId, nil, 0, "")
+		if err != nil {
+			t.Errorf("delete failed: %v", err)
+		}
+		if deleted != 1 {
+			t.Errorf("expected deleted one, was: %v", deleted)
 		}
 		if r.Len() != 6 {
 			t.Errorf("didn't reduce by hello size: wanted=%d, got=%d", 6, r.Len())
@@ -199,7 +187,6 @@ func TestRope(t *testing.T) {
 		if r.Count() != 1 {
 			t.Errorf("expected count=1")
 		}
-
 	}
 }
 
@@ -212,7 +199,6 @@ func TestRandomRope(t *testing.T) {
 		ids = append(ids, 0)
 
 		for j := 0; j < 50; j++ {
-
 			choice := rand.IntN(len(ids))
 			parent := ids[choice]
 
@@ -221,9 +207,13 @@ func TestRandomRope(t *testing.T) {
 			for range length {
 				s += string(rune('a' + rand.IntN(26)))
 			}
-			if !r.InsertIdAfter(parent, nextId(), length, s) {
-				t.Errorf("couldn't insert")
+
+			newId := nextId()
+			_, err := r.Splice(&parent, nil, &newId, length, s)
+			if err != nil {
+				t.Errorf("couldn't insert: %v", err)
 			}
+			ids = append(ids, newId)
 		}
 	}
 }
@@ -231,68 +221,85 @@ func TestRandomRope(t *testing.T) {
 func TestIter(t *testing.T) {
 	r := New[int, string]()
 
-	r.InsertIdAfter(0, 1, 5, "hello")
-	if r.LastId() != 1 {
+	zero := 0
+	one := nextId()
+	two := nextId()
+	three := nextId()
+
+	_, err := r.Splice(&zero, nil, &one, 5, "hello")
+	if err != nil {
+		t.Errorf("couldn't insert: %v", err)
+	}
+	if r.LastId() != one {
 		t.Errorf("should have first lastId")
 	}
 
-	r.InsertIdAfter(1, 2, 6, " there")
-	if r.LastId() != 2 {
+	_, err = r.Splice(&one, nil, &two, 6, " there")
+	if err != nil {
+		t.Errorf("couldn't insert: %v", err)
+	}
+	if r.LastId() != two {
 		t.Errorf("should have second lastId")
 	}
 
-	r.InsertIdAfter(2, 3, 4, " bob")
-	if r.LastId() != 3 {
+	_, err = r.Splice(&two, nil, &three, 4, " bob")
+	if err != nil {
+		t.Errorf("couldn't insert: %v", err)
+	}
+	if r.LastId() != three {
 		t.Errorf("should have third lastId")
 	}
-
-	// check delete self
 
 	i := r.Iter(0)
 	next, stop := iter.Pull2(i)
 	defer stop()
 
 	id, value, _ := next()
-	if id != 1 || value.Data != "hello" {
+	if id != one || value.Data != "hello" {
 		t.Errorf("bad first next")
 	}
 
-	// delete item we just returned
-	if r.DeleteTo(1, 1) != 0 {
-		t.Errorf("should not delete any with same values")
+	// same afterId and deleteUntilId should delete nothing
+	deleted, _ := r.Splice(&one, &one, nil, 0, "")
+	if deleted != 0 {
+		t.Errorf("should not delete any with same values, got: %d", deleted)
 	}
-	if r.DeleteTo(0, 1) != 1 {
-		t.Errorf("should delete one")
+
+	// delete one (after zero, until one)
+	deleted, _ = r.Splice(&zero, &one, nil, 0, "")
+	if deleted != 1 {
+		t.Errorf("should delete one, got: %d", deleted)
 	}
 
 	id, value, _ = next()
-	if id != 2 || value.Data != " there" {
+	if id != two || value.Data != " there" {
 		t.Errorf("bad additional next, got: id=%d value=%v", id, value)
 	}
 
-	r.DeleteTo(2, 3)
+	// delete from two until three
+	r.Splice(&two, &three, nil, 0, "")
 	_, _, ok := next()
 	if ok {
 		t.Errorf("should not get more values: last deleted")
 	}
-
-	// check delete future entry
 
 	i = r.Iter(0)
 	next, stop = iter.Pull2(i)
 	defer stop()
 
 	if r.Count() != 1 {
-		t.Errorf("should hve single entry")
+		t.Errorf("should have single entry, got: %d", r.Count())
 	}
 
-	if r.LastId() != 2 {
+	if r.LastId() != two {
 		t.Errorf("should have second lastId, was=%v", r.LastId())
 	}
-	r.DeleteTo(0, 2)
+
+	// delete remaining
+	r.Splice(&zero, &two, nil, 0, "")
 
 	if r.Count() != 0 {
-		t.Errorf("should hve no entries")
+		t.Errorf("should have no entries")
 	}
 
 	id, value, ok = next()
