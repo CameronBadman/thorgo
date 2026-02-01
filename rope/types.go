@@ -18,6 +18,41 @@ type DataLen[T any] struct {
 	Data T
 }
 
+type ropeLevel[Id comparable, T any] struct {
+	next        *ropeNode[Id, T] // can be nil
+	prev        *ropeNode[Id, T] // always set
+	subtreesize int
+}
+
+type iterRef[Id comparable, T any] struct {
+	count int
+	node  *ropeNode[Id, T]
+}
+
+type ropeNode[Id comparable, T any] struct {
+	id     Id
+	dl     DataLen[T]
+	levels []ropeLevel[Id, T]
+
+	// if set, an iterator is chilling here for the next value
+	iterRef *iterRef[Id, T]
+}
+
+type Removed[Id comparable, T any] struct {
+	Id   Id
+	Len  int
+	Data T
+}
+
+type ropeImpl[Id comparable, T any] struct {
+	head     ropeNode[Id, T]
+	len      int
+	byId     map[Id]*ropeNode[Id, T]
+	height   int // matches len(head.levels)
+	nodePool []*ropeNode[Id, T]
+	lastId   Id
+}
+
 // Rope is a skip list.
 // It supports zero-length entries.
 // It is not goroutine-safe.
@@ -56,14 +91,13 @@ type Rope[Id comparable, T any] interface {
 	// afterId: anchor point (nil = head/start)
 	// deleteUntilId: if non-nil, delete nodes from afterId until this Id
 	// newId: if non-nil, insert new node with given data
-	// Returns count of deleted nodes.
+	// Returns removed nodes for undo support.
 	// Costs ~O(logn+m), where m is the number of nodes being deleted.
-	Splice(afterId *Id, deleteUntilId *Id, newId *Id, length int, data T) (deleted int, err error)
-	// LastId returns the last Id in this rope.
-
+	Splice(afterId *Id, deleteUntilId *Id, newId *Id, length int, data T) (removed []Removed[Id, T], err error)
+	// Insert adds a new entry after afterId. Convenience wrapper around Splice.
 	Insert(afterId Id, newId Id, length int, data T) error
 	// Delete removes entries from after afterId until untilId. Convenience wrapper around Splice.
-	Delete(afterId Id, untilId Id) (int, error)
-
+	Delete(afterId Id, untilId Id) ([]Removed[Id, T], error)
+	// LastId returns the last Id in this rope.
 	LastId() Id
 }

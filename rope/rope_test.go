@@ -171,12 +171,12 @@ func TestRope(t *testing.T) {
 			t.Errorf("bad read")
 		}
 
-		deleted, err := r.Splice(&zero, &helloId, nil, 0, "")
+		removed, err := r.Splice(&zero, &helloId, nil, 0, "")
 		if err != nil {
 			t.Errorf("delete failed: %v", err)
 		}
-		if deleted != 1 {
-			t.Errorf("expected deleted one, was: %v", deleted)
+		if len(removed) != 1 {
+			t.Errorf("expected deleted one, was: %v", len(removed))
 		}
 		if r.Len() != 6 {
 			t.Errorf("didn't reduce by hello size: wanted=%d, got=%d", 6, r.Len())
@@ -260,15 +260,15 @@ func TestIter(t *testing.T) {
 	}
 
 	// same afterId and deleteUntilId should delete nothing
-	deleted, _ := r.Splice(&one, &one, nil, 0, "")
-	if deleted != 0 {
-		t.Errorf("should not delete any with same values, got: %d", deleted)
+	removed, _ := r.Splice(&one, &one, nil, 0, "")
+	if len(removed) != 0 {
+		t.Errorf("should not delete any with same values, got: %d", len(removed))
 	}
 
 	// delete one (after zero, until one)
-	deleted, _ = r.Splice(&zero, &one, nil, 0, "")
-	if deleted != 1 {
-		t.Errorf("should delete one, got: %d", deleted)
+	removed, _ = r.Splice(&zero, &one, nil, 0, "")
+	if len(removed) != 1 {
+		t.Errorf("should delete one, got: %d", len(removed))
 	}
 
 	id, value, _ = next()
